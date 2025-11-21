@@ -11,11 +11,22 @@ import mcp.server.stdio
 
 from ...core.use_cases.music import MusicService
 from ...infrastructure.external.youtube_repository import YouTubeRepository
+from ...infrastructure.external.spotify_repository import SpotifyRepository
 from ...infrastructure.database.postgres_repository import PostgresRepository
 
 # Initialize services
-music_repo = YouTubeRepository()
-music_service = MusicService(music_repo)
+youtube_repo = YouTubeRepository()
+youtube_service = MusicService(youtube_repo)
+
+# Try to initialize Spotify service, but don't fail if credentials aren't available
+try:
+    spotify_repo = SpotifyRepository()
+    spotify_service = MusicService(spotify_repo)
+    spotify_available = True
+except (ValueError, Exception):
+    spotify_service = None
+    spotify_available = False
+
 db_repo = PostgresRepository()
 
 # Create the MCP server
@@ -194,7 +205,93 @@ async def list_tools() -> List[Tool]:
             description="List all downloaded MP3 songs",
             inputSchema={"type": "object", "properties": {}, "required": []},
         ),
-    ]
+    ] + ([
+        # Spotify Tools
+        Tool(
+            name="spotify_search_music",
+            description="Search for music on Spotify",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Search query"},
+                    "limit": {"type": "number", "description": "Max results (default: 10)"},
+                    "filter_type": {
+                        "type": "string",
+                        "description": "Filter: songs, albums, artists, playlists",
+                        "enum": ["songs", "albums", "artists", "playlists"]
+                    }
+                },
+                "required": ["query"],
+            },
+        ),
+        Tool(
+            name="spotify_get_song_details",
+            description="Get detailed information about a Spotify track",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "track_id": {"type": "string", "description": "Spotify Track ID"},
+                },
+                "required": ["track_id"],
+            },
+        ),
+        Tool(
+            name="spotify_get_artist_details",
+            description="Get detailed information about a Spotify artist",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "artist_id": {"type": "string", "description": "Spotify Artist ID"},
+                },
+                "required": ["artist_id"],
+            },
+        ),
+        Tool(
+            name="spotify_get_album_details",
+            description="Get detailed information about a Spotify album",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "album_id": {"type": "string", "description": "Spotify Album ID"},
+                },
+                "required": ["album_id"],
+            },
+        ),
+        Tool(
+            name="spotify_get_lyrics",
+            description="Get lyrics information for a Spotify track",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "track_id": {"type": "string", "description": "Spotify Track ID"},
+                },
+                "required": ["track_id"],
+            },
+        ),
+        Tool(
+            name="spotify_get_trending",
+            description="Get trending music from Spotify",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "limit": {"type": "number", "description": "Max results (default: 20)"},
+                },
+                "required": [],
+            },
+        ),
+        Tool(
+            name="spotify_get_recommendations",
+            description="Get music recommendations based on a Spotify track",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "track_id": {"type": "string", "description": "Base track ID"},
+                    "limit": {"type": "number", "description": "Max results (default: 10)"},
+                },
+                "required": ["track_id"],
+            },
+        ),
+    ] if spotify_available else [])
 
 @server.call_tool()
 async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
@@ -228,45 +325,92 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
 
         # Music Tools
         elif name == "youtube_search_music":
-            results = music_service.search_music(
-                arguments.get("query", ""), 
+            results = youtube_service.search_music(
+                arguments.get("query", ""),
                 arguments.get("limit", 10),
                 arguments.get("filter_type", "songs")
             )
             return [TextContent(type="text", text=f"Results: {json.dumps(results, indent=2, default=str)}")]
-            
+
         elif name == "youtube_get_song_details":
-            details = music_service.get_song_details(arguments.get("video_id", ""))
+            details = youtube_service.get_song_details(arguments.get("video_id", ""))
             return [TextContent(type="text", text=f"Details: {json.dumps(details, indent=2, default=str)}")]
-            
+
         elif name == "youtube_get_artist_details":
-            details = music_service.get_artist_details(arguments.get("channel_id", ""))
+            details = youtube_service.get_artist_details(arguments.get("channel_id", ""))
             return [TextContent(type="text", text=f"Details: {json.dumps(details, indent=2, default=str)}")]
-            
+
         elif name == "youtube_get_album_details":
-            details = music_service.get_album_details(arguments.get("browse_id", ""))
+            details = youtube_service.get_album_details(arguments.get("browse_id", ""))
             return [TextContent(type="text", text=f"Details: {json.dumps(details, indent=2, default=str)}")]
-            
+
         elif name == "youtube_get_lyrics":
-            lyrics = music_service.get_lyrics(arguments.get("video_id", ""))
+            lyrics = youtube_service.get_lyrics(arguments.get("video_id", ""))
             return [TextContent(type="text", text=f"Lyrics: {json.dumps(lyrics, indent=2, default=str)}")]
-            
+
         elif name == "youtube_download_mp3":
-            result = music_service.download_song(arguments.get("video_id", ""), arguments.get("filename"))
+            result = youtube_service.download_song(arguments.get("video_id", ""), arguments.get("filename"))
             return [TextContent(type="text", text=f"Result: {json.dumps(result, indent=2, default=str)}")]
-            
+
         elif name == "youtube_get_trending":
-            results = music_service.get_trending(arguments.get("limit", 20))
+            results = youtube_service.get_trending(arguments.get("limit", 20))
             return [TextContent(type="text", text=f"Trending: {json.dumps(results, indent=2, default=str)}")]
-            
+
         elif name == "youtube_get_recommendations":
-            results = music_service.get_recommendations(arguments.get("video_id", ""), arguments.get("limit", 10))
+            results = youtube_service.get_recommendations(arguments.get("video_id", ""), arguments.get("limit", 10))
             return [TextContent(type="text", text=f"Recommendations: {json.dumps(results, indent=2, default=str)}")]
             
         elif name == "youtube_list_downloaded":
-            songs = music_service.get_downloaded_songs()
+            songs = youtube_service.get_downloaded_songs()
             return [TextContent(type="text", text=f"Downloaded: {json.dumps(songs, indent=2, default=str)}")]
-            
+
+        # Spotify Tools
+        elif name == "spotify_search_music":
+            if not spotify_available:
+                return [TextContent(type="text", text="Error: Spotify service not available. Please check your credentials.")]
+            results = spotify_service.search_music(
+                arguments.get("query", ""),
+                arguments.get("limit", 10),
+                arguments.get("filter_type", "songs")
+            )
+            return [TextContent(type="text", text=f"Results: {json.dumps(results, indent=2, default=str)}")]
+
+        elif name == "spotify_get_song_details":
+            if not spotify_available:
+                return [TextContent(type="text", text="Error: Spotify service not available. Please check your credentials.")]
+            details = spotify_service.get_song_details(arguments.get("track_id", ""))
+            return [TextContent(type="text", text=f"Details: {json.dumps(details, indent=2, default=str)}")]
+
+        elif name == "spotify_get_artist_details":
+            if not spotify_available:
+                return [TextContent(type="text", text="Error: Spotify service not available. Please check your credentials.")]
+            details = spotify_service.get_artist_details(arguments.get("artist_id", ""))
+            return [TextContent(type="text", text=f"Details: {json.dumps(details, indent=2, default=str)}")]
+
+        elif name == "spotify_get_album_details":
+            if not spotify_available:
+                return [TextContent(type="text", text="Error: Spotify service not available. Please check your credentials.")]
+            details = spotify_service.get_album_details(arguments.get("album_id", ""))
+            return [TextContent(type="text", text=f"Details: {json.dumps(details, indent=2, default=str)}")]
+
+        elif name == "spotify_get_lyrics":
+            if not spotify_available:
+                return [TextContent(type="text", text="Error: Spotify service not available. Please check your credentials.")]
+            lyrics = spotify_service.get_lyrics(arguments.get("track_id", ""))
+            return [TextContent(type="text", text=f"Info: {json.dumps(lyrics, indent=2, default=str)}")]
+
+        elif name == "spotify_get_trending":
+            if not spotify_available:
+                return [TextContent(type="text", text="Error: Spotify service not available. Please check your credentials.")]
+            results = spotify_service.get_trending(arguments.get("limit", 20))
+            return [TextContent(type="text", text=f"Trending: {json.dumps(results, indent=2, default=str)}")]
+
+        elif name == "spotify_get_recommendations":
+            if not spotify_available:
+                return [TextContent(type="text", text="Error: Spotify service not available. Please check your credentials.")]
+            results = spotify_service.get_recommendations(arguments.get("track_id", ""), arguments.get("limit", 10))
+            return [TextContent(type="text", text=f"Recommendations: {json.dumps(results, indent=2, default=str)}")]
+
         else:
             raise ValueError(f"Unknown tool: {name}")
             

@@ -26,7 +26,7 @@ class MusicRepository(ABC):
     @abstractmethod
     def get_trending(self, limit: int) -> List[Dict[str, Any]]:
         pass
-        
+
     @abstractmethod
     def get_recommendations(self, video_id: str, limit: int) -> List[Dict[str, Any]]:
         pass
@@ -34,7 +34,7 @@ class MusicRepository(ABC):
     @abstractmethod
     def download_song(self, video_id: str, filename: Optional[str] = None) -> Dict[str, Any]:
         pass
-    
+
     @abstractmethod
     def get_downloaded_songs(self) -> List[Dict[str, Any]]:
         pass
@@ -57,15 +57,27 @@ class MusicService:
 
     def get_lyrics(self, video_id: str) -> Dict[str, Any]:
         return self.repository.get_lyrics(video_id)
-        
+
     def get_trending(self, limit: int = 20) -> List[Dict[str, Any]]:
         return self.repository.get_trending(limit)
-        
+
     def get_recommendations(self, video_id: str, limit: int = 10) -> List[Dict[str, Any]]:
         return self.repository.get_recommendations(video_id, limit)
 
     def download_song(self, video_id: str, filename: Optional[str] = None) -> Dict[str, Any]:
         return self.repository.download_song(video_id, filename)
-        
+
     def get_downloaded_songs(self) -> List[Dict[str, Any]]:
         return self.repository.get_downloaded_songs()
+
+    @staticmethod
+    def create_youtube_service():
+        """Factory method to create a MusicService with YouTube repository"""
+        from ...infrastructure.external.youtube_repository import YouTubeRepository
+        return MusicService(YouTubeRepository())
+
+    @staticmethod
+    def create_spotify_service():
+        """Factory method to create a MusicService with Spotify repository"""
+        from ...infrastructure.external.spotify_repository import SpotifyRepository
+        return MusicService(SpotifyRepository())
